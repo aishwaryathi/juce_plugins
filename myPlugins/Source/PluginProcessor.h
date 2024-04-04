@@ -54,12 +54,19 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     double rawVolume{ 0.5 };
-
+    float lastSample = 0;
 private:
     juce::dsp::Chorus <float> chorusEffect;
-
     double gainSmoothed{0.5};
-    float lastSample = 0;
+    static constexpr int fftOrder = 10;
+    static constexpr int fftSize = 1 << fftOrder;
+    juce::dsp::FFT forwardFFT;
+    juce::dsp::FFT inverseFFT;
+    juce::dsp::WindowingFunction<float> window;
+    float fifo[fftSize];
+    float fftData[2 * fftSize];
+    int fifoIndex = 0;
+    bool nextFFTBlockReady = false;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TestTake2AudioProcessor)
