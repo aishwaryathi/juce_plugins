@@ -1,1 +1,1 @@
-Here is the demo of the setup/gain plugin: https://drive.google.com/file/d/1cCT2Ch9-Gp8iSVeHyO1UMFXdC_5ujR1z/view?usp=sharing
+Here is the demo of the gain and pitch shift plugin: [https://drive.google.com/file/d/1cCT2Ch9-Gp8iSVeHyO1UMFXdC_5ujR1z/view?usp=sharing](https://drive.google.com/file/d/1EK9ZLPpE7xOCiZuAICpyvRQVIOyInblk/view?usp=sharing)
