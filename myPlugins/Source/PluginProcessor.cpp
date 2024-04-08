@@ -11,18 +11,12 @@ TestTake2AudioProcessor::TestTake2AudioProcessor()
                       #endif
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
                      #endif
-                       ), chorusEffect(),//, lowPassFilter(juce::dsp::IIR::Coefficients<float>::makeFirstOrderLowPass(44100, 2000.0f)
+                       ), chorusEffect()//, lowPassFilter(juce::dsp::IIR::Coefficients<float>::makeFirstOrderLowPass(44100, 2000.0f)
                         
-                        forwardFFT(fftOrder),
-                        inverseFFT(fftOrder),
-                        window(fftSize, juce::dsp::WindowingFunction<float>::hann),
-                        fifoIndex(0),
-                        nextFFTBlockReady(false)
     
 #endif
 {
-    std::fill(fifo, fifo + fftSize, 0);
-    std::fill(fftData, fftData + 2 * fftSize, 0);
+
 }
 
 TestTake2AudioProcessor::~TestTake2AudioProcessor()
@@ -141,93 +135,89 @@ bool TestTake2AudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts
 }
 #endif
 
+
+
+
+
+
 void TestTake2AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
-    const int numSamples = buffer.getNumSamples();
+    juce::ScopedNoDenormals noDenormals;
+        auto totalNumInputChannels  = getTotalNumInputChannels();
+        auto totalNumOutputChannels = getTotalNumOutputChannels();
+        const int numberSamples = buffer.getNumSamples(); // get the initial number of samples
 
-    for (int sample = 0; sample < numSamples; ++sample) {
-        for (int channel = 0; channel < getTotalNumInputChannels(); ++channel) {
-            fifo[fifoIndex++] = buffer.getSample(channel, sample);
+        // In case we have more outputs than inputs, this code clears any output
+        // channels that didn't contain input data, (because these aren't
+        // guaranteed to be empty - they may contain garbage).
+        // This is here to avoid people getting screaming feedback
+        // when they first compile a plugin, but obviously you don't need to keep
+        // this code if your algorithm always overwrites all the output channels.
+        for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
+            buffer.clear (i, 0, buffer.getNumSamples());
 
-            if (fifoIndex == fftSize) {
-                std::fill(fftData, fftData + 2 * fftSize, 0);
-                std::copy(fifo, fifo + fftSize, fftData);
-                window.multiplyWithWindowingTable(fftData, fftSize);
-                forwardFFT.performFrequencyOnlyForwardTransform(fftData);
-
-                // Simple pitch shifting by moving bins (octave up)
-                for (int i = 0; i < fftSize; i++) {
-                    fftData[i] = fftData[i * 10]; // Move every bin up one octave
+        // This is the place where you'd normally do the guts of your plugin's
+        // audio processing...
+        // Make sure to reset the state if your inner loop is processing
+        // the samples and the outer loop is handling the channels.
+        // Alternatively, you can process the samples with the channels
+        // interleaved by keeping the same state.
+        for (int channel = 0; channel < totalNumInputChannels; ++channel)
+        {
+            auto* channelData = buffer.getWritePointer (channel);
+            for (int channel = 0; channel < totalNumInputChannels; ++channel)
+            {
+                auto* channelData = buffer.getWritePointer (channel);
+                
+                for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
+                    if (sample > 0) {
+                        channelData[sample] =
+                        (buffer.getSample(channel, sample-1) * rawVolume * 0.5) +
+                        (buffer.getSample(channel, sample) * rawVolume * 0.5);
+                    }
+                    else if (sample ==0){
+                        channelData[sample] =
+                        (buffer.getSample(channel, sample) * rawVolume * 0.5);// +
+                        //(lastSample * rawVolume * 0.5);
+                        
+                    }
+                    lastSample = buffer.getSample(channel, sample);
                 }
+                
+            }
+            
+            int tmp = 1 + setPitch;
+            float stepSize = 1.0f / tmp;
+            float position = 0.0f;
 
-                forwardFFT.performRealOnlyInverseTransform(fftData);
-                std::copy(fftData, fftData + fftSize, fifo);
-                fifoIndex = 0;
+            //a temp buffer in attempt to down sample the audio to produce lower pitch
+            std::vector<float> tempBuffer(buffer.getNumSamples());
+
+            for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
+                //get to position to refactor as the index of the buffer
+                int index = static_cast<int>(position);
+
+                // this is for to the "selected" samples in the downsampling phase
+                if (position == index) {
+                    tempBuffer[sample] = channelData[index];
+                } else {
+                    tempBuffer[sample] = tempBuffer[sample - 1];
+                }
+                
+                position += stepSize;
+                
+                // handling for reaching end of the buffer
+                if (position >= buffer.getNumSamples()) position -= buffer.getNumSamples();
+            }
+
+            // write ack our redefined pitch back to output channel
+            for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
+                channelData[sample] = tempBuffer[sample];
             }
         }
-    }
 
-    if (fifoIndex >= fftSize) {
-        for (int sample = 0; sample < numSamples; ++sample) {
-            for (int channel = 0; channel < getTotalNumInputChannels(); ++channel) {
-                buffer.setSample(channel, sample, fifo[sample]);
-            }
-        }
-    }
+
 }
-
-
-
-
-//void TestTake2AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
-//{
-//    juce::ScopedNoDenormals noDenormals;
-//    auto totalNumInputChannels  = getTotalNumInputChannels();
-//    auto totalNumOutputChannels = getTotalNumOutputChannels();
-//
-//    // In case we have more outputs than inputs, this code clears any output
-//    // channels that didn't contain input data, (because these aren't
-//    // guaranteed to be empty - they may contain garbage).
-//    // This is here to avoid people getting screaming feedback
-//    // when they first compile a plugin, but obviously you don't need to keep
-//    // this code if your algorithm always overwrites all the output channels.
-//    for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-//        buffer.clear (i, 0, buffer.getNumSamples());
-//
-//    juce::dsp::AudioBlock<float> block(buffer);
-//
-//    //chorusEffect.process(juce::dsp::ProcessContextReplacing <float>(block));
-//
-//    // This is the place where you'd normally do the guts of your plugin's
-//    // audio processing...
-//    // Make sure to reset the state if your inner loop is processing
-//    // the samples and the outer loop is handling the channels.
-//    // Alternatively, you can process the samples with the channels
-//    // interleaved by keeping the same state.
-//    //totalNumInputChannels = 1;
-//    for (int channel = 0; channel < totalNumInputChannels; ++channel)
-//    {
-//        auto* channelData = buffer.getWritePointer (channel);
-//
-//        for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
-//            if (sample > 0) {
-//                channelData[sample] =
-//                    (buffer.getSample(channel, sample-1) * rawVolume * 0.5) +
-//                    (buffer.getSample(channel, sample) * rawVolume * 0.5);
-//            }
-//            else if (sample ==0){
-//                channelData[sample] =
-//                    (buffer.getSample(channel, sample) * rawVolume * 0.5);// +
-//                    //(lastSample * rawVolume * 0.5);
-//
-//            }
-//            lastSample = buffer.getSample(channel, sample);
-//        }
-//
-//    }
-//
-//
-//}
 
 //==============================================================================
 bool TestTake2AudioProcessor::hasEditor() const
