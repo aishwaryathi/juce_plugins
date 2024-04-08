@@ -22,7 +22,13 @@ TestTake2AudioProcessorEditor::TestTake2AudioProcessorEditor (TestTake2AudioProc
     gainSlider.setValue(0.5f);
     gainSlider.addListener(this);
     addAndMakeVisible(gainSlider);
-
+    setSize(400, 300);
+    pitchSlider.setSliderStyle(juce::Slider::SliderStyle::LinearVertical);
+    pitchSlider.setTextBoxStyle(juce::Slider::TextBoxAbove, true, 50, 20);
+    pitchSlider.setRange(0.0f, 2.0f, 1.0f);
+    pitchSlider.setValue(0.5f);
+    pitchSlider.addListener(this);
+    addAndMakeVisible(pitchSlider);
     setSize(400, 300);
 }
 
@@ -38,18 +44,23 @@ void TestTake2AudioProcessorEditor::paint (juce::Graphics& g)
 
     g.setColour (juce::Colours::white);
     g.setFont (15.0f);
-    g.drawFittedText ("Hello World!!!", getLocalBounds(), juce::Justification::centred, 1);
+    g.drawFittedText ("Gain (left) Pitch (right)", getLocalBounds(), juce::Justification::centred, 1);
     gainSlider.setBounds(50, getHeight() / 2 - 100, 100, 200);
+    pitchSlider.setBounds(150, getHeight() / 2 - 100, 100, 200);
 }
 
 void TestTake2AudioProcessorEditor::resized()
-{
-    // This is generally where you'll want to lay out the positions of any
+{    // This is generally where you'll want to lay out the positions of any
     // subcomponents in your editor..
 }
 
 void TestTake2AudioProcessorEditor::sliderValueChanged(juce::Slider *slider) {
     if (slider == &gainSlider) {
         audioProcessor.rawVolume = gainSlider.getValue();
+    }else{
+        if (slider == &pitchSlider) {
+            audioProcessor.setPitch = pitchSlider.getValue();
+        }
     }
 }
+
